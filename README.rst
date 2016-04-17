@@ -36,7 +36,7 @@ Installation
 
 .. code-block:: bash
 
-    pip install rdb2rdf
+    pip install https://github.com/cthoyt/pyrdb2rdf/archive/master.zip
 
 
 ********
@@ -57,12 +57,9 @@ code achieves that.
 
 .. code-block:: python
 
-    import rdflib as _rdf
-    import sqlalchemy as _sqla
+    db_str = "postgresql://testuser:testpass@localhost:5432/testdb"
+    engine = sqlalchemy.create_engine(db_str)
+    store = rdb2rdf.stores.DirectMapping(configuration=engine, base_iri=base_iri)
+    graph = rdflib.Graph(store)
+    print(str(graph.serialize(format='turtle'), 'utf-8'))
 
-    db_str = 'postgresql://testuser:testpasswd@localhost/testdb'
-    db = _sqla.create_engine(db_str)
-    graph = _rdf.Graph('rdb2rdf_dm')
-    graph.open(db)
-
-    print(graph.serialize(format='nt'))

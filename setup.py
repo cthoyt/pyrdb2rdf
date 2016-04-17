@@ -41,11 +41,11 @@ def shortdoc_from_doc(doc):
                 line += ' '
 
             yield line
+
     return ' '.join(iter_shortdoc_lines())
 
 
 def read_doc(mod_filepath):
-
     mod_text = _io.open(mod_filepath).read()
     match = MOD_DOC_RE.search(mod_text)
 
@@ -58,7 +58,6 @@ def read_doc(mod_filepath):
 
 
 def read_version(mod_filepath):
-
     mod_text = _io.open(mod_filepath).read()
     mod_version_match = MOD_VERSION_RE.search(mod_text)
 
@@ -97,8 +96,8 @@ LICENSE = _io.open(LICENSE_FILE, 'r').read()
 
 LONG_DESCRIPTION = '\n\n'.join((README, CHANGES))
 
-TROVE_CLASSIFIERS = \
-    ('Development Status :: 2 - Pre-Alpha',
+TROVE_CLASSIFIERS = (
+    'Development Status :: 2 - Pre-Alpha',
      'Intended Audience :: Developers',
      'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
      'Operating System :: POSIX',
@@ -106,8 +105,7 @@ TROVE_CLASSIFIERS = \
      'Topic :: Database',
      'Topic :: Internet',
      'Topic :: Software Development :: Libraries :: Python Modules',
-     )
-
+)
 
 # dependencies ----------------------------------------------------------------
 
@@ -121,7 +119,6 @@ TESTS_DEPS = ()
 
 DEPS_SEARCH_URIS = ()
 
-
 # packages --------------------------------------------------------------------
 
 NAMESPACE_PKGS_NAMES = ()
@@ -130,21 +127,20 @@ SCRIPTS_PKG_NAME = '.'.join((ROOT_PKG_NAME, 'scripts'))
 
 TESTS_PKG_NAME = '.'.join((ROOT_PKG_NAME, 'tests'))
 
-
 # entry points ----------------------------------------------------------------
 
 STD_SCRIPTS_PKG_COMMANDS = {}
 
-COMMANDS = {cmd: '{}.{}:{}'.format(SCRIPTS_PKG_NAME,
-                                   script if isinstance(script, str) else script[0],
-                                   'main' if isinstance(script, str) else script[1])
-            for cmd, script in STD_SCRIPTS_PKG_COMMANDS.items()}
+COMMANDS = {}
+for cmd, script in STD_SCRIPTS_PKG_COMMANDS.items():
+    COMMANDS[cmd] = '{}.{}:{}'.format(SCRIPTS_PKG_NAME,
+                                      script if isinstance(script, str) else script[0],
+                                      "main" if isinstance(script, str) else script[1])
 
-ENTRY_POINTS = {'console_scripts': ['{} = {}'.format(name, funcpath)
-                                    for name, funcpath in COMMANDS.items()],
-                'rdf.plugins.store': ('rdb2rdf_dm = rdb2rdf.stores:DirectMapping',),
-                }
-
+ENTRY_POINTS = {
+    'console_scripts': ['{} = {}'.format(name, funcpath) for name, funcpath in COMMANDS.items()],
+    'rdf.plugins.store': ('rdb2rdf_dm = rdb2rdf.stores:DirectMapping',),
+}
 
 if __name__ == '__main__':
     _setup(name=NAME,

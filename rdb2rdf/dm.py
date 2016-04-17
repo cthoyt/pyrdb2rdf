@@ -32,12 +32,12 @@ def orm_automap_base(name='Base', base_iri=None, mapper=None, use_pseudo_primary
 
     """
 
-    DeclarativeBase = orm_declarative_base(name='{}_DeclarativeBase'.format(name),
+    declarative_base = orm_declarative_base(name='{}_DeclarativeBase'.format(name),
                                            base_iri=base_iri,
                                            cls=(declarative_base or object),
                                            mapper=mapper,
                                            **kwargs)
-    automap_base = _sqla_automap.automap_base(DeclarativeBase,
+    automap_base = _sqla_automap.automap_base(declarative_base,
                                               name=('{}_AutomapBase'.format(name) if use_pseudo_primary_keys else name))
 
     if not use_pseudo_primary_keys:
@@ -73,25 +73,23 @@ def orm_automap_base(name='Base', base_iri=None, mapper=None, use_pseudo_primary
     return automap_base
 
 
-def orm_declarative_base(name='OrmBase', base_iri=None, mapper=None,
+def orm_declarative_base(name='OrmBase', base_iri=None, mapper=_sqla_orm.mapper,
                          metaclass=_sqla_decl.DeclarativeMeta, **kwargs):
-    declarativebasemeta = type('{}_DeclarativeBaseMeta'.format(name),
-                               (OrmDeclarativeMetaMixin, metaclass), {})
+    declarativebasemeta = type('{}_DeclarativeBaseMeta'.format(name), (OrmDeclarativeMetaMixin, metaclass), {})
     declarativebase = _sqla_decl.declarative_base(name=name,
-                                                  mapper=(mapper or _sqla_orm.mapper),
+                                                  mapper=mapper,
                                                   metaclass=declarativebasemeta, **kwargs)
     declarativebase.__base_iri__ = base_iri
     return declarativebase
 
 
 class OrmDeclarativeMetaMixin(type):
-    def __new__(cls, name, bases, attrs):
+    def __new__(mcs, name, bases, attrs):
 
         if all(name not in attrs for name in ('__str__', '__unicode__')):
             attrs['__unicode__'] = _orm_object_str
 
-        class_ = super(OrmDeclarativeMetaMixin, cls).__new__(cls, name, bases,
-                                                             attrs)
+        class_ = super(OrmDeclarativeMetaMixin, mcs).__new__(mcs, name, bases, attrs)
 
         try:
             rdf_mapper = attrs['__rdf_mapper__']
@@ -160,12 +158,10 @@ class OrmRdfMapper(object):
                     rdf.add(predicate_iri, object_id)
 
             for col in self.__table__.columns:
-                predicate_iri = _rdf.URIRef('{}#{}'.format(self.table_iri(),
-                                                           _common.iri_safe(col.name)))
+                predicate_iri = _rdf.URIRef('{}#{}'.format(self.table_iri(), _common.iri_safe(col.name)))
                 value = getattr(self, col.name)
                 if value is not None:
-                    value_rdf = _common.rdf_literal_from_sql(value,
-                                                             sql_type=col.type)
+                    value_rdf = _common.rdf_literal_from_sql(value, sql_type=col.type)
                     rdf.add(predicate_iri, value_rdf)
 
             self._rdf = rdf
