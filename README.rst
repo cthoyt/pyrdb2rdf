@@ -57,6 +57,9 @@ code achieves that.
 
 .. code-block:: python
 
+    import rdflib
+    import sqlalchemy
+
     db_str = "postgresql://testuser:testpass@localhost:5432/testdb"
     engine = sqlalchemy.create_engine(db_str)
     store = rdb2rdf.stores.DirectMapping(configuration=engine, base_iri=base_iri)
