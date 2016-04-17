@@ -62,7 +62,7 @@ code achieves that.
 
     db_str = "postgresql://testuser:testpass@localhost:5432/testdb"
     engine = sqlalchemy.create_engine(db_str)
-    store = rdb2rdf.stores.DirectMapping(configuration=engine, base_iri=base_iri)
+    store = rdb2rdf.stores.DirectMapping(configuration=engine)
     graph = rdflib.Graph(store)
     print(str(graph.serialize(format='turtle'), 'utf-8'))
 
