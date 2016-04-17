@@ -9,9 +9,6 @@
 
 """
 
-__copyright__ = "Copyright (C) 2014 Ivan D Vasin"
-__docformat__ = "restructuredtext"
-
 import rdflib as _rdf
 import rdflib.resource as _rdf_res
 import sqlalchemy as _sqla
@@ -21,11 +18,12 @@ import sqlalchemy.ext.declarative as _sqla_decl
 
 from . import _common
 
+__copyright__ = "Copyright (C) 2014 Ivan D Vasin"
+__docformat__ = "restructuredtext"
 
-def orm_automap_base(name='Base', base_iri=None, mapper=None,
-                     use_pseudo_primary_keys=True, declarative_base=None,
+
+def orm_automap_base(name='Base', base_iri=None, mapper=None, use_pseudo_primary_keys=True, declarative_base=None,
                      **kwargs):
-
     """
 
     .. note:: **WARNING:**
@@ -34,24 +32,21 @@ def orm_automap_base(name='Base', base_iri=None, mapper=None,
 
     """
 
-    DeclarativeBase = \
-        orm_declarative_base(name='{}_DeclarativeBase'.format(name),
-                             base_iri=base_iri,
-                             cls=(declarative_base or object),
-                             mapper=mapper,
-                             **kwargs)
-    AutomapBase = \
-        _sqla_automap.automap_base(DeclarativeBase,
-                                   name=('{}_AutomapBase'.format(name)
-                                         if use_pseudo_primary_keys else name))
+    DeclarativeBase = orm_declarative_base(name='{}_DeclarativeBase'.format(name),
+                                           base_iri=base_iri,
+                                           cls=(declarative_base or object),
+                                           mapper=mapper,
+                                           **kwargs)
+    automap_base = _sqla_automap.automap_base(DeclarativeBase,
+                                              name=('{}_AutomapBase'.format(name) if use_pseudo_primary_keys else name))
 
     if not use_pseudo_primary_keys:
-        return AutomapBase
+        return automap_base
 
-    prepare_base = AutomapBase.prepare
+    prepare_base = automap_base.prepare
 
     @classmethod
-    def prepare(cls, engine=None, reflect=False, **kwargs):
+    def prepare(cls, engine=None, reflect=False, **innerkwargs):
 
         if reflect:
             cls.metadata.reflect(bind=engine)
@@ -60,37 +55,33 @@ def orm_automap_base(name='Base', base_iri=None, mapper=None,
         for table in cls.metadata.tables.values():
             if not table.primary_key:
                 if table.indexes:
-                    pseudo_pkey_index = \
-                        min((index for index in table.indexes if index.unique),
-                            key=(lambda index: len(index.columns)))
+                    pseudo_pkey_index = min((index for index in table.indexes if index.unique),
+                                            key=lambda index: len(index.columns))
                     pseudo_pkey_cols = pseudo_pkey_index.columns
                 else:
                     pseudo_pkey_cols = table.columns
 
-                table.primary_key = \
-                    PseudoPrimaryKeyConstraint(*pseudo_pkey_cols)
+                table.primary_key = PseudoPrimaryKeyConstraint(*pseudo_pkey_cols)
                 pseudo_pkey_tables_names.add(table.key)
 
-        prepare_base(engine=engine, reflect=False, **kwargs)
+        prepare_base(engine=engine, reflect=False, **innerkwargs)
 
         for class_ in cls.classes:
-            class_.__mapper__.has_pseudo_primary_key = \
-                class_.__table__.key in pseudo_pkey_tables_names
+            class_.__mapper__.has_pseudo_primary_key = class_.__table__.key in pseudo_pkey_tables_names
 
-    AutomapBase.prepare = prepare
-    return AutomapBase
+    automap_base.prepare = prepare
+    return automap_base
 
 
 def orm_declarative_base(name='OrmBase', base_iri=None, mapper=None,
                          metaclass=_sqla_decl.DeclarativeMeta, **kwargs):
-    DeclarativeBaseMeta = type('{}_DeclarativeBaseMeta'.format(name),
+    declarativebasemeta = type('{}_DeclarativeBaseMeta'.format(name),
                                (OrmDeclarativeMetaMixin, metaclass), {})
-    DeclarativeBase = \
-        _sqla_decl.declarative_base(name=name,
-                                    mapper=(mapper or _sqla_orm.mapper),
-                                    metaclass=DeclarativeBaseMeta, **kwargs)
-    DeclarativeBase.__base_iri__ = base_iri
-    return DeclarativeBase
+    declarativebase = _sqla_decl.declarative_base(name=name,
+                                                  mapper=(mapper or _sqla_orm.mapper),
+                                                  metaclass=declarativebasemeta, **kwargs)
+    declarativebase.__base_iri__ = base_iri
+    return declarativebase
 
 
 class OrmDeclarativeMetaMixin(type):
@@ -114,7 +105,6 @@ class OrmDeclarativeMetaMixin(type):
 
 
 class OrmRdfMapper(object):
-
     def __init__(self, class_):
         self._class = class_
 
@@ -134,17 +124,13 @@ class OrmRdfMapper(object):
             if self.has_pseudo_primary_key:
                 self._node = None
             else:
-                pkey_rdf_items = \
-                    [(_common.iri_safe(col.name),
-                      _common.iri_safe
-                       (_common.rdf_literal_from_sql(getattr(self, col.name),
-                                                     sql_type=col.type)))
-                     for col in self.__table__.primary_key.columns]
-                self._node = \
-                    _rdf.URIRef('/'.join((self.table_iri(),
-                                          ';'.join('{}={}'.format(name, value)
-                                                   for name, value
-                                                   in pkey_rdf_items))))
+                pkey_rdf_items = [(_common.iri_safe(col.name),
+                                   _common.iri_safe
+                                   (_common.rdf_literal_from_sql(getattr(self, col.name),
+                                                                 sql_type=col.type)))
+                                  for col in self.__table__.primary_key.columns]
+                self._node = _rdf.URIRef('/'.join((self.table_iri(),
+                                         ';'.join('{}={}'.format(name, value) for name, value in pkey_rdf_items))))
             return self._node
             self._rdf_id = self.node if self.node is not None else _rdf.BNode()
 
@@ -163,25 +149,19 @@ class OrmRdfMapper(object):
 
             fkeys_colnames_by_target_tablename = {}
             for fkey in self.__table__.foreign_keys:
-                fkeys_colnames_by_target_tablename\
-                 .setdefault(fkey.column.table.name, fkey.constraint.columns)
-            for target_tablename, colnames \
-                    in fkeys_colnames_by_target_tablename.items():
-                predicate_iri = \
-                    _rdf.URIRef('{}#ref-{}'.format(self.table_iri(),
-                                                   ';'.join(colnames)))
+                fkeys_colnames_by_target_tablename.setdefault(fkey.column.table.name, fkey.constraint.columns)
+            for target_tablename, colnames in fkeys_colnames_by_target_tablename.items():
+                predicate_iri = _rdf.URIRef('{}#ref-{}'.format(self.table_iri(), ';'.join(colnames)))
                 try:
-                    object_id = \
-                        getattr(self, fkey.column.table.name.lower()).rdf_id
+                    object_id = getattr(self, fkey.column.table.name.lower()).rdf_id
                 except AttributeError:
                     pass
                 else:
                     rdf.add(predicate_iri, object_id)
 
             for col in self.__table__.columns:
-                predicate_iri = \
-                    _rdf.URIRef('{}#{}'.format(self.table_iri(),
-                                               _common.iri_safe(col.name)))
+                predicate_iri = _rdf.URIRef('{}#{}'.format(self.table_iri(),
+                                                           _common.iri_safe(col.name)))
                 value = getattr(self, col.name)
                 if value is not None:
                     value_rdf = _common.rdf_literal_from_sql(value,
@@ -214,9 +194,7 @@ class OrmRdfMapper(object):
         try:
             return cls._table_iri
         except AttributeError:
-            cls._table_iri = \
-                cls._prefixed_iri\
-                 (_rdf.URIRef(_common.iri_safe(cls.__table__.name)))
+            cls._table_iri = cls._prefixed_iri(_rdf.URIRef(_common.iri_safe(cls.__table__.name)))
             return cls._table_iri
 
     @classmethod

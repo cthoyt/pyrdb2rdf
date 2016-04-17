@@ -1,26 +1,25 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-__copyright__ = "Copyright (C) 2014 Ivan D Vasin"
-__credits__ = ["Ivan D Vasin"]
-__maintainer__ = "Ivan D Vasin"
-__email__ = "nisavid@gmail.com"
-__docformat__ = "restructuredtext"
-
 import io as _io
 import os as _os
 import re as _re
 
 from setuptools import find_packages as _find_packages, setup as _setup
 
+__copyright__ = "Copyright (C) 2014 Ivan D Vasin"
+__credits__ = ["Ivan D Vasin"]
+__maintainer__ = "Ivan D Vasin"
+__email__ = "nisavid@gmail.com"
+__docformat__ = "restructuredtext"
 
 # helpers ---------------------------------------------------------------------
 
 
 MOD_DOC_RE = _re.compile(r'\A(?:(?:\s*(?:\#[^$]*)?)\n)*'
-                          r'(?:(?P<dquot>""")|(?P<squot>\'\'\'))\n?'
-                          r'(?P<doc>.*)'
-                          r'(?(dquot)"""|\'\'\')',
+                         r'(?:(?P<dquot>""")|(?P<squot>\'\'\'))\n?'
+                         r'(?P<doc>.*)'
+                         r'(?(dquot)"""|\'\'\')',
                          _re.DOTALL | _re.MULTILINE)
 
 MOD_VERSION_RE = _re.compile(r'^__version__ = [\'"](?P<version>[^\'"]*)[\'"]$',
@@ -52,8 +51,8 @@ def read_doc(mod_filepath):
 
     if not match:
         raise RuntimeError('cannot find module docstring in file {!r} with'
-                            ' pattern {!r}'
-                            .format(mod_filepath, MOD_DOC_RE.pattern))
+                           ' pattern {!r}'
+                           .format(mod_filepath, MOD_DOC_RE.pattern))
 
     return match.group('doc')
 
@@ -65,8 +64,8 @@ def read_version(mod_filepath):
 
     if not mod_version_match:
         raise RuntimeError('cannot find module version string in file {!r}'
-                            ' with pattern {!r}'
-                            .format(mod_filepath, MOD_VERSION_RE.pattern))
+                           ' with pattern {!r}'
+                           .format(mod_filepath, MOD_VERSION_RE.pattern))
 
     return mod_version_match.group('version')
 
@@ -77,8 +76,7 @@ NAME = 'rdb2rdf'
 
 ROOT_PKG_NAME = _re.sub(r'[^\d\w]', '_', _re.sub(r'^[^\w]', '_', NAME))
 
-ROOT_PKG_ABSPATH = file_abspath_from_parts(*(ROOT_PKG_NAME.split('.')
-                                              + ['__init__.py']))
+ROOT_PKG_ABSPATH = file_abspath_from_parts(*(ROOT_PKG_NAME.split('.') + ['__init__.py']))
 
 VERSION = read_version(ROOT_PKG_ABSPATH)
 
@@ -102,8 +100,7 @@ LONG_DESCRIPTION = '\n\n'.join((README, CHANGES))
 TROVE_CLASSIFIERS = \
     ('Development Status :: 2 - Pre-Alpha',
      'Intended Audience :: Developers',
-     'License :: OSI Approved :: GNU Lesser General Public License v3'
-      ' (LGPLv3)',
+     'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
      'Operating System :: POSIX',
      'Programming Language :: Python :: 2.7',
      'Topic :: Database',
@@ -116,8 +113,7 @@ TROVE_CLASSIFIERS = \
 
 SETUP_DEPS = ()
 
-INSTALL_DEPS = ('rdflib', 'spruce-collections', 'spruce-datetime',
-                'spruce-iri', 'spruce-types', 'sqlalchemy >=0.9.1')
+INSTALL_DEPS = ('rdflib', 'sqlalchemy >=0.9.1')
 
 EXTRAS_DEPS = {}
 
@@ -140,16 +136,13 @@ TESTS_PKG_NAME = '.'.join((ROOT_PKG_NAME, 'tests'))
 STD_SCRIPTS_PKG_COMMANDS = {}
 
 COMMANDS = {cmd: '{}.{}:{}'.format(SCRIPTS_PKG_NAME,
-                                   script if isinstance(script, basestring)
-                                          else script[0],
-                                   'main' if isinstance(script, basestring)
-                                          else script[1])
+                                   script if isinstance(script, str) else script[0],
+                                   'main' if isinstance(script, str) else script[1])
             for cmd, script in STD_SCRIPTS_PKG_COMMANDS.items()}
 
 ENTRY_POINTS = {'console_scripts': ['{} = {}'.format(name, funcpath)
                                     for name, funcpath in COMMANDS.items()],
-                'rdf.plugins.store':
-                    ('rdb2rdf_dm = rdb2rdf.stores:DirectMapping',),
+                'rdf.plugins.store': ('rdb2rdf_dm = rdb2rdf.stores:DirectMapping',),
                 }
 
 

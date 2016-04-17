@@ -13,13 +13,13 @@ from functools import partial as _partial, reduce as _reduce
 import json as _json
 from operator import add as _add
 import re as _re
-from urllib import unquote as _pct_decoded
+from urllib.parse import unquote as _pct_decoded
+from urllib.parse import urlparse
 
 import rdflib as _rdf
-from spruce.collections import frozendict as _frozendict
-from spruce.types import require_isinstance as _require_isinstance
-import spruce.iri.goose as _iri_goose
+
 import sqlalchemy as _sqla
+
 _sqlaf = _sqla.func
 import sqlalchemy.orm as _sqla_orm
 
@@ -27,8 +27,43 @@ from . import _common
 from . import dm as _dm
 
 
-class DirectMapping(_rdf.store.Store):
+def require_isinstance(value, type, type_displayname=None,
+                       inst_description=None):
+    if not isinstance(value, type):
+        type_displayname = type_displayname or _type_displayname(type)
 
+        if inst_description is None:
+            try:
+                inst_description = type.convertible_value_description()
+            except (AttributeError, TypeError):
+                pass
+
+        raise Exception("These things: {}{}{}".format(value, type_displayname, inst_description))
+
+
+def _type_displayname(type):
+    if isinstance(type, tuple):
+        type_displayname_items = []
+        for type_item in type:
+            try:
+                type_item_displayname = type_item.displayname()
+            except (AttributeError, TypeError):
+                type_item_displayname = str(type_item)
+            type_displayname_items.append(type_item_displayname)
+
+        return str(tuple(type_displayname_items))
+
+    else:
+        try:
+            return type.displayname()
+        except (AttributeError, TypeError):
+            try:
+                return type.__name__
+            except AttributeError:
+                return str(type)
+
+
+class DirectMapping(_rdf.store.Store):
     """SQLAlchemy RDB2RDF Direct Mapping store
 
     :param configuration:
@@ -112,41 +147,37 @@ class DirectMapping(_rdf.store.Store):
             #   * 1 for each reference property statement (1 for each totally
             #     non-null foreign key value tuple of each row)
             len_ += \
-                self._orm.query\
-                 (_sqla.func.count(subject_class.__mapper__.primary_key[0])
-                   + _reduce
-                      (_add,
-                       (_sqlaf.sum
-                         (_sqla.case(((prop.class_attribute == None,
-                                       _sqla.literal(0)),),
-                                     else_=_sqla.literal(1)))
-                        for prop in subject_cols_props.values()),
-                       _sqla.literal(0))
-                   + _reduce
-                      (_add,
-                       (_sqlaf.sum
-                         (_sqla.case
-                           (((_reduce
-                               (_sqla.and_,
-                                (subject_cols_props[colname].class_attribute
-                                  != None
-                                 for colname in colnames),
-                                _sqla.literal(True)),
-                              _sqla.literal(1)),
-                             ),
-                            else_=_sqla.literal(0)))
-                        for colnames in subject_rels.keys()),
-                       _sqla.literal(0)))\
-                 .scalar()
+                self._orm.query \
+                    (_sqla.func.count(subject_class.__mapper__.primary_key[0])
+                     + _reduce
+                     (_add,
+                      (_sqlaf.sum
+                       (_sqla.case(((prop.class_attribute is None,
+                                     _sqla.literal(0)),),
+                                   else_=_sqla.literal(1)))
+                       for prop in subject_cols_props.values()),
+                      _sqla.literal(0))
+                     + _reduce
+                     (_add,
+                      (_sqlaf.sum
+                       (_sqla.case
+                        (((_reduce
+                           (_sqla.and_,
+                            (subject_cols_props[colname].class_attribute
+                             is not None
+                             for colname in colnames),
+                            _sqla.literal(True)),
+                           _sqla.literal(1)),
+                          ),
+                         else_=_sqla.literal(0)))
+                       for colnames in subject_rels.keys()),
+                      _sqla.literal(0))) \
+                    .scalar()
 
         return len_
 
-    def add(self, (subject, predicate, object), context=None, quoted=False):
-
-        # FIXME
-
-        super(DirectMapping, self).add((subject, predicate, object),
-                                       context=context, quoted=quoted)
+    def add(self, triple, context=None, quoted=False):
+        super(DirectMapping, self).add(triple, context=context, quoted=quoted)
 
     def addN(self, quads):
         for subject, predicate, object, context in quads:
@@ -172,7 +203,7 @@ class DirectMapping(_rdf.store.Store):
 
     @base_iri.setter
     def _(self, value):
-        _require_isinstance(value, _iri_goose.UriReference)
+        urlparse(value)
         self._base_iri = value
 
     def bind(self, prefix, namespace):
@@ -242,8 +273,8 @@ class DirectMapping(_rdf.store.Store):
             self.OrmBase.prepare(reflect=reflect)
             self._rdb_metadata = self.OrmBase.metadata
             self._orm_classes = \
-                _frozendict((self._table_iri(class_.__table__.name), class_)
-                            for class_ in self.OrmBase.classes)
+                dict((self._table_iri(class_.__table__.name), class_)
+                     for class_ in self.OrmBase.classes)
 
         if self._orm_mappers is None:
             mappers_items = []
@@ -257,21 +288,21 @@ class DirectMapping(_rdf.store.Store):
 
                 mappers_items.append((table_iri, class_mapper))
                 colprops_items.append((table_iri, props))
-                cols_datatypes_items\
-                 .append((table_iri,
-                          {colname: _common.canon_rdf_datatype_from_sql
-                                     (prop.columns[0].type)
-                           for colname, prop in props.items()}))
-                rels_items\
-                 .append((table_iri,
-                          _orm_relationship_by_local_column_names
-                           (mapper=class_mapper)))
+                cols_datatypes_items \
+                    .append((table_iri,
+                             {colname: _common.canon_rdf_datatype_from_sql
+                             (prop.columns[0].type)
+                              for colname, prop in props.items()}))
+                rels_items \
+                    .append((table_iri,
+                             _orm_relationship_by_local_column_names
+                             (mapper=class_mapper)))
                 if class_mapper.has_pseudo_primary_key:
                     bnode_tables.add(table_iri)
-            self._orm_mappers = _frozendict(mappers_items)
-            self._orm_columns_properties = _frozendict(colprops_items)
-            self._orm_columns_rdf_datatypes = _frozendict(cols_datatypes_items)
-            self._orm_relationships = _frozendict(rels_items)
+            self._orm_mappers = dict(mappers_items)
+            self._orm_columns_properties = dict(colprops_items)
+            self._orm_columns_rdf_datatypes = dict(cols_datatypes_items)
+            self._orm_relationships = dict(rels_items)
             self._orm_bnode_tables = frozenset(bnode_tables)
 
         if self._orm is None:
@@ -288,21 +319,15 @@ class DirectMapping(_rdf.store.Store):
         except KeyError:
             return None
 
-    def remove(self, (subject, predicate, object), context=None):
-
-        # FIXME
-
-        super(DirectMapping, self).remove((subject, predicate, object),
-                                          context=context)
+    def remove(self, triple, context=None):
+        super(DirectMapping, self).remove(triple, context=context)
 
     def rollback(self):
         self._rdb_transaction.rollback()
 
     transaction_aware = True
 
-    def triples(self, (subject_pattern, predicate_pattern, object_pattern),
-                context=None):
-
+    def triples(self, spo, context=None):
         """Match triples.
 
         :param subject_pattern:
@@ -371,16 +396,18 @@ class DirectMapping(_rdf.store.Store):
 
         """
 
+        subject_pattern, predicate_pattern, object_pattern = spo
+
         if context is not None \
-               and not (isinstance(context, _rdf.Graph)
-                        and isinstance(context.identifier, _rdf.BNode)):
+                and not (isinstance(context, _rdf.Graph)
+                         and isinstance(context.identifier, _rdf.BNode)):
             return
 
         if subject_pattern is None:
             if predicate_pattern is None:
                 for subject_table_iri in self._orm_classes.keys():
                     for triple \
-                            in self._table_allpredicates_triples\
+                            in self._table_allpredicates_triples \
                                 (subject_table_iri, object_pattern):
                         yield triple, None
 
@@ -435,25 +462,25 @@ class DirectMapping(_rdf.store.Store):
             table_iri_str, _, pkeyspec = node.rpartition('/')
         except AttributeError:
             raise TypeError(u'invalid row node {!r}: not a string'
-                             .format(node))
+                            .format(node))
 
         if not table_iri_str or '=' not in pkeyspec:
-            raise ValueError\
-                   (u'invalid row node {!r}: does not match format {!r}'
-                     .format(node, 'table/colname=value[;colname=value]...'))
+            raise ValueError \
+                (u'invalid row node {!r}: does not match format {!r}'
+                 .format(node, 'table/colname=value[;colname=value]...'))
 
         table_iri = _rdf.URIRef(table_iri_str)
 
         if table_iri in self._orm_bnode_tables:
             if not isinstance(node, _rdf.BNode):
                 raise ValueError('invalid node type {!r} for blank node table'
-                                  ' {!r}: not blank node'
-                                  .format(node.__class__, table_iri))
+                                 ' {!r}: not blank node'
+                                 .format(node.__class__, table_iri))
         else:
             if not isinstance(node, _rdf.URIRef):
                 raise ValueError('invalid node type {!r} for IRI node table'
-                                  ' {!r}: not IRI node'
-                                  .format(node.__class__, table_iri))
+                                 ' {!r}: not IRI node'
+                                 .format(node.__class__, table_iri))
 
         pkey = {}
         cols_props = self._orm_columns_properties[table_iri]
@@ -474,14 +501,14 @@ class DirectMapping(_rdf.store.Store):
             table_iri_str, _, colspec = iri.partition('#')
         except AttributeError:
             raise TypeError(u'invalid predicate IRI {!r}: not a string'
-                             .format(iri))
+                            .format(iri))
 
         if not table_iri_str or not colspec:
             raise ValueError(u'invalid predicate IRI {!r}:'
-                              u' does not match either format {!r}'
-                              .format(iri,
-                                      ('table#colname',
-                                       'table#ref-colname[;colname]...')))
+                             u' does not match either format {!r}'
+                             .format(iri,
+                                     ('table#colname',
+                                      'table#ref-colname[;colname]...')))
 
         table_iri = _rdf.URIRef(table_iri_str)
 
@@ -513,21 +540,20 @@ class DirectMapping(_rdf.store.Store):
 
         if isinstance(configuration, _sqla.engine.interfaces.Connectable):
             return configuration
-
-        elif isinstance(configuration, basestring):
+        elif isinstance(configuration, str):
             try:
                 parts = _json.loads(configuration)
             except TypeError as exc:
                 raise TypeError('invalid configuration type {!r}: {}'
-                                 .format(type(configuration), exc))
+                                .format(type(configuration), exc))
             except ValueError as exc:
                 raise ValueError('invalid configuration {!r}: {}'
-                                  .format(configuration, exc))
+                                 .format(configuration, exc))
 
             if len(parts) > 2:
                 raise ValueError('invalid configuration {!r}: expecting a JSON'
-                                  ' sequence of two or less items'
-                                  .format(configuration))
+                                 ' sequence of two or less items'
+                                 .format(configuration))
 
             if parts:
                 rdb_args = parts[0]
@@ -544,19 +570,19 @@ class DirectMapping(_rdf.store.Store):
                 rdb_args, rdb_kwargs = configuration
             except TypeError as exc:
                 raise TypeError('invalid configuration type {!r}: {}'
-                                 .format(type(configuration), exc))
+                                .format(type(configuration), exc))
             except ValueError as exc:
                 raise ValueError('invalid configuration {!r}: {}'
-                                  .format(configuration, exc))
+                                 .format(configuration, exc))
 
         return _sqla.create_engine(*rdb_args, **rdb_kwargs)
 
     def _ref_property_iri(self, table_iri, fkey_colnames):
         return _rdf.URIRef(u'{}#ref-{}'
-                            .format(table_iri,
-                                    ';'.join(_common.iri_safe(colname)
-                                             for colname
-                                             in fkey_colnames)))
+                           .format(table_iri,
+                                   ';'.join(_common.iri_safe(colname)
+                                            for colname
+                                            in fkey_colnames)))
 
     def _row_bnode_from_sql(self, table_iri, pkey_items):
         return _rdf.BNode(self._row_str_from_sql(table_iri, pkey_items))
@@ -574,14 +600,14 @@ class DirectMapping(_rdf.store.Store):
             return _partial(self._row_iri_from_sql, table_iri)
 
     def _row_str_from_sql(self, table_iri, pkey_items):
-        return u'{}/{}'\
-                .format(table_iri,
-                        ';'.join(u'{}={}'
-                                  .format(_common.iri_safe(col.name),
-                                          _common.iri_safe
-                                           (_common.rdf_literal_from_sql
-                                             (value, sql_type=col.type)))
-                                 for col, value in pkey_items))
+        return u'{}/{}' \
+            .format(table_iri,
+                    ';'.join(u'{}={}'
+                             .format(_common.iri_safe(col.name),
+                                     _common.iri_safe
+                                     (_common.rdf_literal_from_sql
+                                      (value, sql_type=col.type)))
+                             for col, value in pkey_items))
 
     def _subject_triples(self, subject_node, predicate_pattern,
                          object_pattern):
@@ -595,10 +621,10 @@ class DirectMapping(_rdf.store.Store):
         subject_cols_props = \
             self._orm_columns_properties[subject_table_iri]
 
-        query = self._orm.query(subject_class)\
-                         .filter(*(attr == value
-                                   for attr, value
-                                   in subject_pkey.items()))
+        query = self._orm.query(subject_class) \
+            .filter(*(attr == value
+                      for attr, value
+                      in subject_pkey.items()))
 
         if predicate_pattern is None:
             if object_pattern is None:
@@ -633,8 +659,8 @@ class DirectMapping(_rdf.store.Store):
                          for col
                          in object_table.primary_key.columns]
 
-                    query = query.outerjoin(predicate_prop.class_attribute)\
-                                 .add_columns(*object_pkey_attrs)
+                    query = query.outerjoin(predicate_prop.class_attribute) \
+                        .add_columns(*object_pkey_attrs)
 
                 query_result_values = query.first()
                 query_result_values_pending = _deque(query_result_values)
@@ -657,8 +683,8 @@ class DirectMapping(_rdf.store.Store):
                     yield (subject_node,
                            predicate_iri,
                            _common.rdf_literal_from_sql
-                            (object_value,
-                             sql_type=predicate_col.type))
+                           (object_value,
+                            sql_type=predicate_col.type))
 
                 for predicate_prop in subject_rels:
                     object_table = predicate_prop.target
@@ -667,17 +693,17 @@ class DirectMapping(_rdf.store.Store):
                         [query_result_values_pending.popleft()
                          for _ in range(len(object_pkey_cols))]
                     object_node_from_sql = \
-                        self._row_node_from_sql_func\
-                         (self._table_iri(object_table.name))
+                        self._row_node_from_sql_func \
+                            (self._table_iri(object_table.name))
 
                     if any(value is None for value in object_pkey_values):
                         continue
 
                     predicate_iri = \
-                        self._ref_property_iri\
-                         (subject_table_iri,
-                          (col.name
-                           for col in predicate_prop.local_columns))
+                        self._ref_property_iri \
+                            (subject_table_iri,
+                             (col.name
+                              for col in predicate_prop.local_columns))
 
                     yield (subject_node,
                            predicate_iri,
@@ -691,8 +717,8 @@ class DirectMapping(_rdf.store.Store):
                 subject_cols_props = \
                     self._orm_columns_properties[subject_table_iri]
                 object_sql_types = \
-                    _common.sql_literal_types_from_rdf\
-                     (object_pattern.datatype)
+                    _common.sql_literal_types_from_rdf \
+                        (object_pattern.datatype)
 
                 for predicate_col in subject_mapper.columns:
                     predicate_sql_type = predicate_col.type
@@ -705,12 +731,12 @@ class DirectMapping(_rdf.store.Store):
                             _common.sql_literal_from_rdf(object_pattern)
                         query_cand = \
                             query.filter(predicate_attr
-                                          == object_sql_literal)
+                                         == object_sql_literal)
 
                         if self._orm.query(query_cand.exists()).scalar():
                             predicate_iri = \
-                                self._literal_property_iri\
-                                 (subject_table_iri, predicate_colname)
+                                self._literal_property_iri \
+                                    (subject_table_iri, predicate_colname)
                             yield (subject_node, predicate_iri, object_pattern)
 
             elif isinstance(object_pattern, _rdf.URIRef):
@@ -733,16 +759,16 @@ class DirectMapping(_rdf.store.Store):
 
                 for predicate_prop in subject_rels.values():
                     query_cand = \
-                        query.join(predicate_prop.class_attribute)\
-                             .filter(*(attr == value
-                                       for attr, value
-                                       in object_pkey.items()))
+                        query.join(predicate_prop.class_attribute) \
+                            .filter(*(attr == value
+                                      for attr, value
+                                      in object_pkey.items()))
                     if self._orm.query(query_cand.exists()).scalar():
                         predicate_iri = \
-                            self._ref_property_iri\
-                             (subject_table_iri,
-                              (col.name
-                               for col in predicate_prop.local_columns))
+                            self._ref_property_iri \
+                                (subject_table_iri,
+                                 (col.name
+                                  for col in predicate_prop.local_columns))
                         yield (subject_node, predicate_iri, object_pattern)
 
             else:
@@ -750,8 +776,8 @@ class DirectMapping(_rdf.store.Store):
 
         elif predicate_pattern == _rdf.RDF.type:
             if object_pattern is None \
-                   or (isinstance(object_pattern, _rdf.URIRef)
-                       and object_pattern == subject_table_iri):
+                    or (isinstance(object_pattern, _rdf.URIRef)
+                        and object_pattern == subject_table_iri):
                 if self._orm.query(query.exists()).scalar():
                     yield (subject_node, _rdf.RDF.type, subject_table_iri)
 
@@ -772,8 +798,8 @@ class DirectMapping(_rdf.store.Store):
                     object_pkey_cols = object_table.primary_key.columns
 
                     query = \
-                        query.join(predicate_attr)\
-                             .with_entities(*object_pkey_cols)
+                        query.join(predicate_attr) \
+                            .with_entities(*object_pkey_cols)
                     for object_pkey_values in query.all():
                         yield (subject_node,
                                predicate_pattern,
@@ -793,10 +819,10 @@ class DirectMapping(_rdf.store.Store):
                     object_cols_props = \
                         self._orm_columns_properties[object_table_iri]
 
-                    query = query.join(predicate_attr)\
-                                 .filter(*(attr == value
-                                           for attr, value
-                                           in object_pkey.items()))
+                    query = query.join(predicate_attr) \
+                        .filter(*(attr == value
+                                  for attr, value
+                                  in object_pkey.items()))
 
                     if self._orm.query(query.exists()).scalar():
                         yield (subject_node, predicate_pattern, object_pattern)
@@ -811,19 +837,19 @@ class DirectMapping(_rdf.store.Store):
 
                 if object_pattern is None:
                     # IRI, non-ref IRI, *
-                    query = query.with_entities(predicate_attr)\
-                                 .filter(predicate_attr != None)
+                    query = query.with_entities(predicate_attr) \
+                        .filter(predicate_attr != None)
                     for value, in query.all():
                         yield (subject_node, predicate_pattern,
                                _common.rdf_literal_from_sql
-                                (value, sql_type=predicate_col.type))
+                               (value, sql_type=predicate_col.type))
 
                 elif isinstance(object_pattern, _rdf.Literal):
                     # IRI, non-ref IRI, literal
 
                     if object_pattern.datatype \
-                           not in _common.rdf_datatypes_from_sql\
-                                   (predicate_col.type):
+                            not in _common.rdf_datatypes_from_sql \
+                                        (predicate_col.type):
                         return
 
                     object_sql_literal = \
@@ -876,11 +902,11 @@ class DirectMapping(_rdf.store.Store):
                 predicate_attr = predicate_prop.class_attribute
 
                 query = \
-                    query.outerjoin(predicate_attr)\
-                         .add_columns(*(object_cols_props[col.name]
-                                         .class_attribute
-                                        for col
-                                        in object_table.primary_key.columns))
+                    query.outerjoin(predicate_attr) \
+                        .add_columns(*(object_cols_props[col.name]
+                                     .class_attribute
+                                       for col
+                                       in object_table.primary_key.columns))
 
             for query_result_values in query.all():
                 query_result_values_pending = _deque(query_result_values)
@@ -906,7 +932,7 @@ class DirectMapping(_rdf.store.Store):
 
                     yield (subject_node, predicate_iri,
                            _common.rdf_literal_from_sql
-                            (object_value, sql_type=predicate_col.type))
+                           (object_value, sql_type=predicate_col.type))
 
                 for predicate_prop in subject_rels:
                     object_table = predicate_prop.target
@@ -919,15 +945,15 @@ class DirectMapping(_rdf.store.Store):
                         continue
 
                     predicate_iri = \
-                        self._ref_property_iri\
-                         (table_iri,
-                          (col.name for col in predicate_prop.local_columns))
+                        self._ref_property_iri \
+                            (table_iri,
+                             (col.name for col in predicate_prop.local_columns))
 
                     yield (subject_node,
                            predicate_iri,
-                           self._row_node_from_sql\
-                            (self._table_iri(object_table.name),
-                             zip(object_pkey_cols, object_pkey_values)))
+                           self._row_node_from_sql \
+                               (self._table_iri(object_table.name),
+                                zip(object_pkey_cols, object_pkey_values)))
 
         elif isinstance(object_pattern, _rdf.Literal):
             # *(IRI), *, literal
@@ -983,9 +1009,9 @@ class DirectMapping(_rdf.store.Store):
                                             in predicate_prop.local_columns))
 
                 query_cand = \
-                    query.join(predicate_prop.class_attribute)\
-                         .filter(*(attr == value
-                                   for attr, value in object_pkey.items()))
+                    query.join(predicate_prop.class_attribute) \
+                        .filter(*(attr == value
+                                  for attr, value in object_pkey.items()))
                 for subject_pkey_values in query_cand.all():
                     yield (subject_node_from_sql(zip(subject_pkey_cols,
                                                      subject_pkey_values)),
@@ -1016,11 +1042,11 @@ class DirectMapping(_rdf.store.Store):
                 object_table = predicate_prop.target
                 object_pkey_cols = object_table.primary_key.columns
                 object_node_from_sql = \
-                    self._row_node_from_sql_func\
-                     (self._table_iri(object_table.name))
+                    self._row_node_from_sql_func \
+                        (self._table_iri(object_table.name))
 
-                query = query.join(predicate_attr)\
-                             .add_columns(*object_pkey_cols)
+                query = query.join(predicate_attr) \
+                    .add_columns(*object_pkey_cols)
 
                 for result_values in query.all():
                     subject_pkey_values = result_values[:subject_pkey_len]
@@ -1040,10 +1066,10 @@ class DirectMapping(_rdf.store.Store):
                 except (TypeError, ValueError):
                     return
 
-                query = query.join(predicate_attr)\
-                             .filter(*(attr == value
-                                       for attr, value
-                                       in object_pkey.items()))
+                query = query.join(predicate_attr) \
+                    .filter(*(attr == value
+                              for attr, value
+                              in object_pkey.items()))
 
                 for subject_pkey_values in query.all():
                     yield (subject_node_from_sql(zip(subject_pkey_cols,
@@ -1058,14 +1084,14 @@ class DirectMapping(_rdf.store.Store):
             predicate_col, = predicate_attr.property.columns
             object_sql_type = predicate_col.type
 
-            query = query.add_columns(predicate_attr)\
-                         .filter(predicate_attr != None)
+            query = query.add_columns(predicate_attr) \
+                .filter(predicate_attr != None)
 
             if isinstance(object_pattern, _rdf.Literal):
                 # *(IRI), non-ref IRI, literal
 
                 if object_pattern.datatype \
-                       not in _common.rdf_datatypes_from_sql(object_sql_type):
+                        not in _common.rdf_datatypes_from_sql(object_sql_type):
                     return
 
                 object_sql_literal = \
@@ -1073,16 +1099,16 @@ class DirectMapping(_rdf.store.Store):
                 query = query.filter(predicate_attr == object_sql_literal)
 
             if object_pattern is None \
-                 or isinstance(object_pattern, _rdf.Literal):
+                    or isinstance(object_pattern, _rdf.Literal):
                 # *(IRI), non-ref IRI, *
                 query = query.add_columns(predicate_attr)
                 for result_values in query.all():
                     yield (subject_node_from_sql
-                            (zip(subject_pkey_cols,
-                                 result_values[:subject_pkey_len])),
+                           (zip(subject_pkey_cols,
+                                result_values[:subject_pkey_len])),
                            predicate_iri,
                            _common.rdf_literal_from_sql
-                            (result_values[-1], sql_type=predicate_col.type))
+                           (result_values[-1], sql_type=predicate_col.type))
 
             else:
                 return
@@ -1115,19 +1141,19 @@ class DirectMapping(_rdf.store.Store):
 
 
 def _orm_column_property_by_name(mapper):
-    return _frozendict((prop.key, prop) for prop in mapper.column_attrs)
+    return dict((prop.key, prop) for prop in mapper.column_attrs)
 
 
 def _orm_relationship_by_local_column_names(mapper):
-    return _frozendict((frozenset(col.name for col in rel.local_columns),
+    return dict((frozenset(col.name for col in rel.local_columns),
                         rel)
                        for rel in mapper.relationships
                        if not rel.collection_class)
 
 
 def _orm_relationship_remote_column_name_by_local_name(mapper):
-    return _frozendict((rel, _frozendict((local_col.name, remote_col.name)
+    return dict((rel, dict((local_col.name, remote_col.name)
                                          for local_col, remote_col
                                          in rel.local_remote_pairs))
-                        for rel in mapper.relationships
-                        if not rel.collection_class)
+                       for rel in mapper.relationships
+                       if not rel.collection_class)
