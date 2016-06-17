@@ -29,8 +29,7 @@ __copyright__ = "Copyright (C) 2014 Ivan D Vasin"
 __docformat__ = "restructuredtext"
 
 
-def require_isinstance(value, type, type_displayname=None,
-                       inst_description=None):
+def require_isinstance(value, type, type_displayname=None, inst_description=None):
     if not isinstance(value, type):
         type_displayname = type_displayname or _type_displayname(type)
 
@@ -235,8 +234,7 @@ class DirectMapping(_rdf.store.Store):
             self.add((subject, predicate, obj), context=context)
 
     def add_graph(self, graph):
-        # FIXME
-        pass
+        raise NotImplementedError()
 
     @property
     def base_iri(self):
@@ -399,8 +397,7 @@ class DirectMapping(_rdf.store.Store):
 
         if context is not None and not (isinstance(context, _rdf.Graph) and isinstance(context.identifier, BNode)):
             return
-
-        if subject_pattern is None:
+        elif subject_pattern is None:
             if predicate_pattern is None:
                 for subject_table_iri in self._orm_classes.keys():
                     for triple in self._table_allpredicates_triples(subject_table_iri, object_pattern):
@@ -416,7 +413,6 @@ class DirectMapping(_rdf.store.Store):
                         yield triple, None
                 else:
                     return
-
             elif isinstance(predicate_pattern, URIRef):
                 try:
                     predicate_attr = self._predicate_orm_attr(predicate_pattern)
@@ -427,14 +423,11 @@ class DirectMapping(_rdf.store.Store):
 
                 for triple in self._table_predicate_triples(subject_table_iri, predicate_pattern, object_pattern):
                     yield triple, None
-
             else:
                 return
-
         elif isinstance(subject_pattern, (URIRef, BNode)):
             for triple in self._subject_triples(subject_pattern, predicate_pattern, object_pattern):
                 yield triple, None
-
         else:
             return
 
@@ -453,14 +446,12 @@ class DirectMapping(_rdf.store.Store):
 
         table_iri = URIRef(table_iri_str)
 
-        if table_iri in self._orm_bnode_tables:
-            if not isinstance(node, BNode):
-                raise ValueError('invalid node type {!r} for blank node table {!r}: not blank node'
-                                 .format(node.__class__, table_iri))
-        else:
-            if not isinstance(node, URIRef):
-                raise ValueError('invalid node type {!r} for IRI node table {!r}: not IRI node'
-                                 .format(node.__class__, table_iri))
+        if table_iri in self._orm_bnode_tables and not isinstance(node, BNode):
+            raise ValueError('invalid node type {!r} for blank node table {!r}: not blank node'
+                             .format(node.__class__, table_iri))
+        elif not isinstance(node, URIRef):
+            raise ValueError('invalid node type {!r} for IRI node table {!r}: not IRI node'
+                             .format(node.__class__, table_iri))
 
         pkey = {}
         cols_props = self._orm_columns_properties[table_iri]
@@ -542,11 +533,9 @@ class DirectMapping(_rdf.store.Store):
             try:
                 rdb_args, rdb_kwargs = configuration
             except TypeError as exc:
-                raise TypeError('invalid configuration type {!r}: {}'
-                                .format(type(configuration), exc))
+                raise TypeError('invalid configuration type {!r}: {}'.format(type(configuration), exc))
             except ValueError as exc:
-                raise ValueError('invalid configuration {!r}: {}'
-                                 .format(configuration, exc))
+                raise ValueError('invalid configuration {!r}: {}'.format(configuration, exc))
 
         return _sqla.create_engine(*rdb_args, **rdb_kwargs)
 

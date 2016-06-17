@@ -45,3 +45,5 @@ nosetests.xml
 
 # rope project files
 .ropeproject
+
+.idea/*
