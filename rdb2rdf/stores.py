@@ -5,23 +5,21 @@
 
 """
 
+import json as _json
+import re as _re
 from collections import deque as _deque
 from functools import partial as _partial, reduce as _reduce
-import json as _json
 from operator import add as _add
-import re as _re
 from urllib.parse import unquote as _pct_decoded
 from urllib.parse import urlparse
 
 import rdflib as _rdf
-
 import sqlalchemy as _sqla
 import sqlalchemy.orm as _sqla_orm
+from rdflib import BNode, Literal, URIRef
 
 from . import _common
 from . import dm as _dm
-
-from rdflib import BNode, Literal, URIRef
 
 _sqlaf = _sqla.func
 
@@ -65,7 +63,7 @@ def _type_displayname(type):
 
 
 def _literal_property_iri(table_iri, colname):
-        return URIRef(u'{}#{}'.format(table_iri, _common.iri_safe(colname)))
+    return URIRef(u'{}#{}'.format(table_iri, _common.iri_safe(colname)))
 
 
 class DirectMapping(_rdf.store.Store):
@@ -510,9 +508,9 @@ class DirectMapping(_rdf.store.Store):
             try:
                 parts = _json.loads(configuration)
             except TypeError as exc:
-                raise TypeError('invalid configuration type {!r}: {}' .format(type(configuration), exc))
+                raise TypeError('invalid configuration type {!r}: {}'.format(type(configuration), exc))
             except ValueError as exc:
-                raise ValueError('invalid configuration {!r}: {}' .format(configuration, exc))
+                raise ValueError('invalid configuration {!r}: {}'.format(configuration, exc))
 
             if len(parts) > 2:
                 raise ValueError('invalid configuration {!r}: expecting a JSON'
@@ -542,10 +540,10 @@ class DirectMapping(_rdf.store.Store):
     @staticmethod
     def _ref_property_iri(table_iri, fkey_colnames):
         return URIRef(u'{}#ref-{}'
-                           .format(table_iri,
-                                   ';'.join(_common.iri_safe(colname)
-                                            for colname
-                                            in fkey_colnames)))
+                      .format(table_iri,
+                              ';'.join(_common.iri_safe(colname)
+                                       for colname
+                                       in fkey_colnames)))
 
     def _row_bnode_from_sql(self, table_iri, pkey_items):
         return BNode(self._row_str_from_sql(table_iri, pkey_items))

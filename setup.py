@@ -22,13 +22,11 @@ MOD_DOC_RE = _re.compile(r'\A(?:(?:\s*(?:\#[^$]*)?)\n)*'
                          r'(?(dquot)"""|\'\'\')',
                          _re.DOTALL | _re.MULTILINE)
 
-MOD_VERSION_RE = _re.compile(r'^__version__ = [\'"](?P<version>[^\'"]*)[\'"]$',
-                             _re.MULTILINE)
+MOD_VERSION_RE = _re.compile(r'^__version__ = [\'"](?P<version>[^\'"]*)[\'"]$', _re.MULTILINE)
 
 
 def file_abspath_from_parts(*relpath_parts):
-    return _os.path.join(_os.path.abspath(_os.path.dirname(__file__)),
-                         *relpath_parts)
+    return _os.path.join(_os.path.abspath(_os.path.dirname(__file__)), *relpath_parts)
 
 
 def shortdoc_from_doc(doc):
@@ -98,13 +96,13 @@ LONG_DESCRIPTION = '\n\n'.join((README, CHANGES))
 
 TROVE_CLASSIFIERS = (
     'Development Status :: 2 - Pre-Alpha',
-     'Intended Audience :: Developers',
-     'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
-     'Operating System :: POSIX',
-     'Programming Language :: Python :: 2.7',
-     'Topic :: Database',
-     'Topic :: Internet',
-     'Topic :: Software Development :: Libraries :: Python Modules',
+    'Intended Audience :: Developers',
+    'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
+    'Operating System :: POSIX',
+    'Programming Language :: Python :: 2.7',
+    'Topic :: Database',
+    'Topic :: Internet',
+    'Topic :: Software Development :: Libraries :: Python Modules',
 )
 
 # dependencies ----------------------------------------------------------------
