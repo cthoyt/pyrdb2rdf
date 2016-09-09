@@ -36,7 +36,8 @@ Installation
 
 .. code-block:: bash
 
-    pip install https://github.com/cthoyt/pyrdb2rdf/archive/master.zip
+    git clone https://github.com/cthoyt/pyrdb2rdf/
+    pip install -e .
 
 
 ********
